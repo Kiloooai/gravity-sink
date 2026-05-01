@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravity Sink</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            cursor: none;
+        }
+
+        canvas {
+            display: block;
+            background: radial-gradient(ellipse at center, #0a0a1a 0%, #000000 100%);
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            color: #0ff;
+            text-shadow: 0 0 10px #0ff;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            backdrop-filter: blur(5px);
+            user-select: none;
+            z-index: 100;
+        }
+
+        .controls h2 {
+            margin-bottom: 15px;
+            font-size: 18px;
+            color: #f0f;
+            text-shadow: 0 0 10px #f0f;
+        }
+
+        .control-group {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-group label {
+            font-size: 12px;
+            min-width: 80px;
+            text-transform: uppercase;
+        }
+
+        input[type="range"] {
+            width: 120px;
+            accent-color: #0ff;
+        }
+
+        button {
+            background: linear-gradient(135deg, #f0f, #0ff);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+            text-transform: uppercase;
+            font-size: 11px;
+            transition: all 0.2s;
+            width: 100%;
+            margin-top: 5px;
+        }
+
+        button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+        }
+
+        .value-display {
+            float: right;
+            color: #fff;
+            font-weight: bold;
+            min-width: 40px;
+            text-align: right;
+        }
+
+        .stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #0f0;
+            text-shadow: 0 0 10px #0f0;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+        }
+
+        .stats div {
+            margin-bottom: 5px;
+        }
+
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff0;
+            text-shadow: 0 0 10px #ff0;
+            font-size: 14px;
+            text-align: center;
+            opacity: 0.8;
+        }
+
+        #custom-cursor {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            border: 2px solid #f0f;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 10000;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px #f0f, inset 0 0 10px rgba(255, 0, 255, 0.3);
+            transition: width 0.1s, height 0.1s;
+        }
+
+        #cursor-core {
+            position: fixed;
+            width: 8px;
+            height: 8px;
+            background: #0ff;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 10001;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 15px #0ff;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="controls">
+        <h2>⚫ GRAVITY SINK</h2>
+
+        <div class="control-group">
+            <label>Gravity</label>
+            <input type="range" id="gravity" min="1" max="100" value="30">
+            <span class="value-display" id="gravityVal">30</span>
+        </div>
+
+        <div class="control-group">
+            <label>Particles</label>
+            <input type="range" id="particleCount" min="50" max="1000" value="300">
+            <span class="value-display" id="particleVal">300</span>
+        </div>
+
+        <div class="control-group">
+            <label>Trail</label>
+            <input type="range" id="trail" min="0" max="30" value="10">
+            <span class="value-display" id="trailVal">10</span>
+        </div>
+
+        <div class="control-group">
+            <label>Color</label>
+            <input type="range" id="colorMode" min="0" max="3" value="0" step="1">
+            <span class="value-display" id="colorVal">Cyan</span>
+        </div>
+
+        <div class="control-group">
+            <label>Mouse</label>
+            <input type="range" id="mouseInfluence" min="0" max="200" value="100">
+            <span class="value-display" id="mouseVal">100%</span>
+        </div>
+
+        <button id="resetBtn">Reset Particles</button>
+        <button id="explodeBtn">Explode Outward</button>
+    </div>
+
+    <div class="stats">
+        <div>Particles: <span id="activeParticles">0</span></div>
+        <div>FPS: <span id="fps">60</span></div>
+        <div>Sink Mass: <span id="sinkMass">1.0</span>x</div>
+    </div>
+
+    <div class="instructions">
+        Move mouse to attract particles • Click to toggle attraction/repulsion • Explode to scatter
+    </div>
+
+    <div id="custom-cursor"></div>
+    <div id="cursor-core"></div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const gravitySlider = document.getElementById('gravity');
+        const particleCountSlider = document.getElementById('particleCount');
+        const trailSlider = document.getElementById('trail');
+        const colorModeSlider = document.getElementById('colorMode');
+        const mouseInfluenceSlider = document.getElementById('mouseInfluence');
+        const resetBtn = document.getElementById('resetBtn');
+        const explodeBtn = document.getElementById('explodeBtn');
+        const customCursor = document.getElementById('custom-cursor');
+        const cursorCore = document.getElementById('cursor-core');
+
+        let particles = [];
+        let mouseX = 0, mouseY = 0;
+        let attractionMode = true; // true = attract, false = repel
+        let lastTime = 0;
+        let fps = 60;
+
+        const colorModes = ['Cyan', 'Magenta', 'Gold', 'Rainbow'];
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.radius = Math.random() * 2 + 1;
+                this.baseRadius = this.radius;
+                this.trail = [];
+                this.maxTrail = 15;
+                this.life = 1;
+                this.color = this.pickColor();
+            }
+
+            pickColor() {
+                const mode = parseInt(colorModeSlider.value);
+                if (mode === 3) {
+                    return `hsl(${Math.random() * 360}, 100%, 60%)`;
+                } else if (mode === 0) {
+                    return '#00ffff'; // cyan
+                } else if (mode === 1) {
+                    return '#ff00ff'; // magenta
+                } else {
+                    return '#ffd700'; // gold
+                }
+            }
+
+            update() {
+                // Mouse attraction/repulsion
+                const dx = mouseX - this.x;
+                const dy = mouseY - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const minDist = 10;
+
+                if (dist > minDist) {
+                    const force = Math.min(100 / (dist * 0.5), 50) * (parseInt(gravitySlider.value) / 30);
+                    const angle = Math.atan2(dy, dx);
+                    const fx = Math.cos(angle) * force * (attractionMode ? 1 : -1);
+                    const fy = Math.sin(angle) * force * (attractionMode ? 1 : -1);
+
+                    this.vx += fx * 0.01;
+                    this.vy += fy * 0.01;
+                }
+
+                // Apply mouse influence multiplier
+                const mult = parseInt(mouseInfluenceSlider.value) / 100;
+                this.vx *= (0.95 + 0.05 * mult);
+                this.vy *= (0.95 + 0.05 * mult);
+
+                // Friction
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Bounce off walls (soft bounce)
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -0.8;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -0.8;
+
+                // Clamp to screen
+                this.x = Math.max(0, Math.min(canvas.width, this.x));
+                this.y = Math.max(0, Math.min(canvas.height, this.y));
+
+                // Update trail
+                this.trail.push({ x: this.x, y: this.y });
+                if (this.trail.length > this.maxTrail) this.trail.shift();
+
+                // Pulse radius based on speed
+                const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                this.radius = this.baseRadius + Math.min(speed * 0.3, 3);
+            }
+
+            draw() {
+                // Draw trail
+                const trailLen = parseInt(trailSlider.value);
+                for (let i = 0; i < this.trail.length; i++) {
+                    const point = this.trail[i];
+                    const alpha = (i / this.trail.length) * 0.4;
+                    const size = (i / this.trail.length) * this.radius;
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, size, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color.replace(')', `, ${alpha})`).replace('hsl', 'hsla');
+                    ctx.fill();
+                }
+
+                // Draw particle
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+            }
+
+            explode() {
+                this.vx = (Math.random() - 0.5) * 20;
+                this.vy = (Math.random() - 0.5) * 20;
+            }
+        }
+
+        function initParticles() {
+            const count = parseInt(particleCountSlider.value);
+            particles = [];
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function animate(timestamp) {
+            const deltaTime = timestamp - lastTime || 16;
+            lastTime = timestamp;
+            fps = Math.round(1000 / deltaTime);
+            document.getElementById('fps').textContent = fps;
+
+            // Fade effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw gravity sink (mouse position)
+            const gravity = parseInt(gravitySlider.value);
+            const sinkRadius = 20 + gravity * 0.3;
+            const gradient = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, sinkRadius);
+            gradient.addColorStop(0, attractionMode ? 'rgba(255, 0, 255, 0.4)' : 'rgba(0, 255, 255, 0.4)');
+            gradient.addColorStop(0.5, attractionMode ? 'rgba(255, 0, 255, 0.1)' : 'rgba(0, 255, 255, 0.1)');
+            gradient.addColorStop(1, 'transparent');
+
+            ctx.beginPath();
+            ctx.arc(mouseX, mouseY, sinkRadius, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // Inner glow
+            ctx.beginPath();
+            ctx.arc(mouseX, mouseY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = attractionMode ? '#ff00ff' : '#00ffff';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = attractionMode ? '#ff00ff' : '#00ffff';
+            ctx.fill();
+
+            // Update and draw particles
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+            }
+
+            document.getElementById('activeParticles').textContent = particles.length;
+            document.getElementById('sinkMass').textContent = (gravity / 30).toFixed(1);
+
+            requestAnimationFrame(animate);
+        }
+
+        // Mouse tracking
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+
+            customCursor.style.left = mouseX + 'px';
+            customCursor.style.top = mouseY + 'px';
+            cursorCore.style.left = mouseX + 'px';
+            cursorCore.style.top = mouseY + 'px';
+        });
+
+        // Toggle attraction/repulsion on click
+        document.addEventListener('click', (e) => {
+            // Skip if clicking controls
+            if (e.target.closest('.controls')) return;
+            attractionMode = !attractionMode;
+            customCursor.style.borderColor = attractionMode ? '#ff00ff' : '#00ffff';
+            cursorCore.style.boxShadow = `0 0 15px ${attractionMode ? '#ff00ff' : '#00ffff'}`;
+        });
+
+        // Reset particles
+        resetBtn.addEventListener('click', () => {
+            initParticles();
+        });
+
+        // Explode outward
+        explodeBtn.addEventListener('click', () => {
+            particles.forEach(p => p.explode());
+        });
+
+        // Update value displays
+        function updateDisplays() {
+            document.getElementById('gravityVal').textContent = gravitySlider.value;
+            document.getElementById('particleVal').textContent = particleCountSlider.value;
+            document.getElementById('trailVal').textContent = trailSlider.value;
+            document.getElementById('colorVal').textContent = colorModes[colorModeSlider.value];
+            document.getElementById('mouseVal').textContent = mouseInfluenceSlider.value + '%';
+        }
+
+        [gravitySlider, particleCountSlider, trailSlider, colorModeSlider, mouseInfluenceSlider].forEach(slider => {
+            slider.addEventListener('input', () => {
+                updateDisplays();
+                if (slider === particleCountSlider) {
+                    // Adjust particle count dynamically
+                    const target = parseInt(particleCountSlider.value);
+                    while (particles.length < target) particles.push(new Particle());
+                    while (particles.length > target) particles.pop();
+                }
+                if (slider === colorModeSlider) {
+                    particles.forEach(p => p.color = p.pickColor());
+                }
+            });
+        });
+
+        updateDisplays();
+        initParticles();
+        animate(0);
+    </script>
+</body>
+</html>
